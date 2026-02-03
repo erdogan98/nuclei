@@ -638,7 +638,13 @@ func isParsingError(store *Store, message string, template string, err error) bo
 
 // LoadTemplates takes a list of templates and returns paths for them
 func (store *Store) LoadTemplates(templatesList []string) []*templates.Template {
-	return store.LoadTemplatesWithTags(templatesList, nil)
+	templates, err := store.LoadTemplatesWithTags(templatesList, nil)
+	if err != nil {
+		// Log the error but return empty slice to maintain backward compatibility
+		store.logger.Error().Msgf("Failed to load templates: %v", err)
+		return nil
+	}
+	return templates
 }
 
 // LoadWorkflows takes a list of workflows and returns paths for them
@@ -668,7 +674,7 @@ func (store *Store) LoadWorkflows(workflowsList []string) []*templates.Template 
 
 // LoadTemplatesWithTags takes a list of templates and extra tags
 // returning templates that match.
-func (store *Store) LoadTemplatesWithTags(templatesList, tags []string) []*templates.Template {
+func (store *Store) LoadTemplatesWithTags(templatesList, tags []string) ([]*templates.Template, error) {
 	defer store.saveMetadataIndexOnce()
 
 	indexFilter := store.indexFilter
@@ -717,7 +723,7 @@ func (store *Store) LoadTemplatesWithTags(templatesList, tags []string) []*templ
 
 	dialers := protocolstate.GetDialersWithId(typesOpts.ExecutionId)
 	if dialers == nil {
-		panic("dialers with executionId " + typesOpts.ExecutionId + " not found")
+		return nil, fmt.Errorf("dialers with executionId %s not found", typesOpts.ExecutionId)
 	}
 
 	for _, templatePath := range includedTemplates {
@@ -852,7 +858,7 @@ func (store *Store) LoadTemplatesWithTags(templatesList, tags []string) []*templ
 		return loadedTemplates.Slice[i].Path < loadedTemplates.Slice[j].Path
 	})
 
-	return loadedTemplates.Slice
+	return loadedTemplates.Slice, nil
 }
 
 // IsHTTPBasedProtocolUsed returns true if http/headless protocol is being used for
